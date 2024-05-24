@@ -14,6 +14,9 @@ class DirectedGraph:
         self.nodes = defaultdict(list)
         self.node_types = defaultdict(list)
         self.deck_name = None
+        self.nodeId_to_fixedId = defaultdict(list)
+        self.fixedId_to_nodeId = defaultdict(list)
+        
 
     def add_edge(self, node1, node2, edge_type):
         if node1 != node2 and (node2 not in self.nodes[node1]):
@@ -133,14 +136,15 @@ class DirectedGraph:
         if self.deck_name is None:
             return
         with open(f'./edges/{self.deck_name}_edge_info.txt', 'w') as f:
-            json.dump({str(k): v for k, v in self.nodes.items()}, f)
+            #json.dump({str(k): v for k, v in self.nodes.items()}, f)
+            json.dump({str(self.nodeId_to_fixedId[node1]): [[self.nodeId_to_fixedId[data[0]],data[1]] for data in self.nodes[node1]] for node1 in self.nodes.keys()},f)
 
     def load_edges(self):
         file_path = f'./edges/{self.deck_name}_edge_info.txt'
         if not os.path.exists(file_path):
             return
         with open(file_path, 'r') as f:
-            self.nodes.update({int(k): v for k, v in json.load(f).items()})
+            self.nodes.update({self.fixedId_to_nodeId[int(k)]: [[self.fixedId_to_nodeId[vv[0]], vv[1]] for vv in v] for k, v in json.load(f).items()})
 
     def remove_edge(self, node1, node2, edge_type):
         self.nodes[node1] = [(n, et) for n, et in self.nodes[node1] if not (n == node2 and et == edge_type)]
@@ -170,7 +174,8 @@ class Application(tk.Tk):
         self.edge_types = {"search": "#ff0000", "chain search": "#0000ff"}#, "c": "#008000", "d": "#000000"}
         self.node_colors = {"monster_ns": "yellow", "monster_ss": "orange", "magic": self.lighten_color("green"),
                             "magic_eq": self.lighten_color("green"), "trap": self.lighten_color("purple")}
-        
+        self.nodeId_to_fixedId = {}
+        self.fixedId_to_nodeId = {}
         self.hand_number = tk.IntVar(self)
         
 
@@ -249,6 +254,7 @@ class Application(tk.Tk):
 
     def restart(self):
         self.canvas.delete("all")
+        self.graph.__init__()
         self.nodes = {}
         self.node_names = {}
         self.node_types = {}
@@ -262,7 +268,17 @@ class Application(tk.Tk):
         self.node_now = None
         self.card_kinds.config(text=f"", bg=self.lighten_color("cyan", amount=0.3), width=15)
         self.lines_for_nodes = {}
-        self.graph.deck_name = None
+        self.nodeId_to_fixedId = {}
+        self.fixedId_to_nodeId = {}
+
+
+    def reindex_keys(dictionary):
+        keys = list(dictionary.keys())
+        keys.sort()
+        new_dict = {}
+        for i, key in enumerate(keys, start=1):
+            new_dict[i] = dictionary[key]
+        return new_dict
 
 
     def save_deck(self):
@@ -322,6 +338,9 @@ class Application(tk.Tk):
                 self.canvas.itemconfig(line1, state="normal")
                 self.canvas.itemconfig(line2, state="normal")
             
+            
+            self.nodeId_to_fixedId[node] = i
+            self.fixedId_to_nodeId[i] = node
 
             self.nodes[node] = (x, y)
             self.lines_for_nodes[node] = (line1, line2)
@@ -332,6 +351,8 @@ class Application(tk.Tk):
             #self.canvas.create_text(x, y, text=node, fill="black", font=("Meiryo", 7))
         
         self.graph.node_types = self.node_types
+        self.graph.nodeId_to_fixedId = self.nodeId_to_fixedId
+        self.graph.fixedId_to_nodeId = self.fixedId_to_nodeId
 
     def create_node(self, event):
         overlapping = self.canvas.find_overlapping(event.x-self.node_size, event.y-self.node_size, event.x+self.node_size, event.y+self.node_size)
@@ -376,6 +397,8 @@ class Application(tk.Tk):
     def finalize_edge(self, event):
         overlapping = self.canvas.find_overlapping(event.x-self.node_size, event.y-self.node_size, event.x+self.node_size, event.y+self.node_size)
         for node in overlapping:
+            if node is None or self.temp_node is None:
+                continue
             if node in self.nodes.keys() and node != self.temp_node:
                 # ユーザがクリックしたノード間にエッジを作成
                 if self.graph.has_edge(self.temp_node, node, self.edge_type.get()):
@@ -547,11 +570,11 @@ class Application(tk.Tk):
 
         for node1, edges in after.items():
             for node2, edge_type in edges:
-                try:
-                    self.nodes[node1][0], self.nodes[node1][1], self.nodes[node2][0], self.nodes[node2][1]
-                except KeyError:
-                    self.graph.nodes = before
-                    return
+                #try:
+                self.nodes[node1][0], self.nodes[node1][1], self.nodes[node2][0], self.nodes[node2][1]
+                #except KeyError:
+                #    self.graph.nodes = before
+                #    return
         
         for node1, edges in after.items():
             for node2, edge_type in edges:
